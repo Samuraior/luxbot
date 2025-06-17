@@ -1,131 +1,100 @@
 import telebot
-from telebot import types
-import json
-import os
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = -1002703116591
 ADMIN_ID = 5611365099
+sponsors = []  # заміни на свої юзернейми або інвайт-лінки
 
 bot = telebot.TeleBot(TOKEN)
-CONFIG_FILE = "config.json"
-user_state = {}
 
-if not os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump({
-            "sponsors": [],
-            "join_link": "",
-            "post_text": "👇 Підпишись на спонсорів і натисни «Вступити в команду»",
-            "button_labels": {
-                "join_team": "Вступити в команду",
-                "sponsor": "Спонсор"
-            }
-        }, f, indent=2)
-
-def load_data():
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_data(data):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-@bot.message_handler(commands=["start"])
+# --- Головне меню ---
+@bot.message_handler(commands=['start'])
 def start(msg):
-    if msg.from_user.id != ADMIN_ID:
-        return
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add("➕ Додати спонсора", "🗑 Видалити спонсора")
-    keyboard.add("✏ Змінити посилання спонсора", "📝 Змінити текст")
-    keyboard.add("🔘 Змінити кнопку", "🔗 Змінити лінк на вступ")
-    keyboard.add("🚀 Створити пост", "📤 Опублікувати в канал")
-    bot.send_message(msg.chat.id, "Привіт! Обери дію:", reply_markup=keyboard)
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("📤 Створити пост", callback_data="create_post"),
+        InlineKeyboardButton("➕ Додати спонсора", callback_data="add_sponsor")
+    )
+    markup.row(
+        InlineKeyboardButton("❌ Видалити спонсора", callback_data="remove_sponsor"),
+        InlineKeyboardButton("🔗 Вступити в команду", callback_data="join_team")
+    )
+    bot.send_message(msg.chat.id, "👋 Вітаю! Обери дію:", reply_markup=markup)
 
-@bot.message_handler(func=lambda m: True)
-def handle(msg):
-    if msg.from_user.id != ADMIN_ID:
-        return
+# --- Обробка кнопок ---
+@bot.callback_query_handler(func=lambda call: True)
+def handle(call):
+    if call.data == "create_post":
+        bot.send_message(call.message.chat.id, "📝 Напиши текст поста:")
+        bot.register_next_step_handler(call.message, process_post_text)
 
-    text = msg.text
-    data = load_data()
+    elif call.data == "join_team":
+        check_subscriptions(call)
 
-    if text == "➕ Додати спонсора":
-        user_state[msg.chat.id] = "add_sponsor"
-        bot.send_message(msg.chat.id, "Введи посилання на спонсора:")
-    elif text == "🗑 Видалити спонсора":
-        user_state[msg.chat.id] = "delete_sponsor"
-        sponsors = "\n".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
-        bot.send_message(msg.chat.id, f"Введи номер спонсора, якого хочеш видалити:\n{sponsors}")
-    elif text == "🗑 Видалити спонсора":
-        user_state[msg.chat.id] = "delete_sponsor"
-        sponsors = "\n".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
-        bot.send_message(msg.chat.id, f"Введи номер спонсора, якого хочеш видалити:\n{sponsors}")
-    elif text == "📝 Змінити текст":
-        user_state[msg.chat.id] = "edit_text"
-        bot.send_message(msg.chat.id, "Введи новий текст для посту (можна з емодзі, посиланнями):")
-    elif text == "🔘 Змінити кнопку":
-        user_state[msg.chat.id] = "edit_buttons"
-        bot.send_message(msg.chat.id, "Формат: sponsor=Текст_кнопки, join=Текст_вступу")
-    elif text == "🔗 Змінити лінк на вступ":
-        user_state[msg.chat.id] = "edit_join"
-        bot.send_message(msg.chat.id, "Введи новий лінк для кнопки 'Вступити в команду':")
-    elif text == "🚀 Створити пост" or text == "📤 Опублікувати в канал":
-        markup = types.InlineKeyboardMarkup()
-        for i, sponsor in enumerate(data["sponsors"]):
-            label = f"{data['button_labels']['sponsor']} {i+1}"
-            markup.add(types.InlineKeyboardButton(label, url=sponsor))
-        join_label = data["button_labels"].get("join_team", "Вступити в команду")
-        markup.add(types.InlineKeyboardButton(join_label, url=data["join_link"]))
+    elif call.data == "add_sponsor":
+        bot.send_message(call.message.chat.id, "🔗 Надішли @юзернейм або лінк на спонсора")
+        bot.register_next_step_handler(call.message, add_sponsor)
 
-        if text == "📤 Опублікувати в канал":
-            try:
-                bot.send_message(CHANNEL_ID, data["post_text"], reply_markup=markup, parse_mode="HTML")
-                bot.send_message(msg.chat.id, "✅ Пост опубліковано в каналі.")
-            except Exception as e:
-                bot.send_message(msg.chat.id, f"❌ Помилка при публікації: {e}")
+    elif call.data == "remove_sponsor":
+        if sponsors:
+            markup = InlineKeyboardMarkup()
+            for sponsor in sponsors:
+                markup.add(InlineKeyboardButton(sponsor, callback_data=f"remove_{sponsor}"))
+            bot.send_message(call.message.chat.id, "Оберіть спонсора для видалення:", reply_markup=markup)
         else:
-            bot.send_message(msg.chat.id, data["post_text"], reply_markup=markup, parse_mode="HTML")
-    else:
-        state = user_state.get(msg.chat.id)
-        if state == "add_sponsor":
-            data["sponsors"].append(text)
-            save_data(data)
-            bot.send_message(msg.chat.id, "✅ Спонсор доданий.")
-        elif state == "delete_sponsor":
-            try:
-                num = int(text) - 1
-                deleted = data["sponsors"].pop(num)
-                save_data(data)
-                bot.send_message(msg.chat.id, f"✅ Видалено: {deleted}")
-            except:
-                bot.send_message(msg.chat.id, "❌ Невірний номер.")
-        elif state == "edit_sponsor":
-            try:
-                parts = text.strip().split(" ", 1)
-                num = int(parts[0]) - 1
-                new_link = parts[1]
-                data["sponsors"][num] = new_link
-                save_data(data)
-                bot.send_message(msg.chat.id, f"✅ Спонсор {num+1} змінено.")
-            except:
-                bot.send_message(msg.chat.id, "❌ Формат: номер нове_посилання")
-        elif state == "edit_text":
-            data["post_text"] = text
-            save_data(data)
-            bot.send_message(msg.chat.id, "✅ Текст оновлено.")
-        elif state == "edit_join":
-            data["join_link"] = text.strip()
-            save_data(data)
-            bot.send_message(msg.chat.id, "✅ Лінк оновлено.")
-        elif state == "edit_buttons":
-            try:
-                parts = dict(x.strip().split("=") for x in text.strip().split(","))
-                data["button_labels"].update(parts)
-                save_data(data)
-                bot.send_message(msg.chat.id, "✅ Назви кнопок оновлено.")
-            except:
-                bot.send_message(msg.chat.id, "❌ Формат: sponsor=..., join=...")
-        user_state[msg.chat.id] = None
+            bot.send_message(call.message.chat.id, "Список спонсорів пустий")
 
-bot.polling(none_stop=True)
+    elif call.data.startswith("remove_"):
+        sponsor_to_remove = call.data.replace("remove_", "")
+        if sponsor_to_remove in sponsors:
+            sponsors.remove(sponsor_to_remove)
+            bot.send_message(call.message.chat.id, f"✅ {sponsor_to_remove} видалено зі списку.")
+
+# --- Обробка створення поста ---
+def process_post_text(msg):
+    post_text = msg.text
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🔗 Вступити в команду", callback_data="join_team"))
+
+    try:
+        bot.send_message(CHANNEL_ID, post_text, reply_markup=markup, parse_mode="HTML")
+        bot.send_message(msg.chat.id, "✅ Пост опубліковано!")
+    except Exception as e:
+        bot.send_message(msg.chat.id, f"❌ Помилка при публікації: {e}")
+
+# --- Додати спонсора ---
+def add_sponsor(msg):
+    sponsor = msg.text.strip()
+    if sponsor not in sponsors:
+        sponsors.append(sponsor)
+        bot.send_message(msg.chat.id, f"✅ Додано спонсора: {sponsor}")
+    else:
+        bot.send_message(msg.chat.id, "⚠️ Цей спонсор вже є у списку")
+
+# --- Перевірка підписок ---
+def check_subscriptions(call):
+    user_id = call.from_user.id
+    not_subscribed = []
+
+    for sponsor in sponsors:
+        try:
+            sponsor_id = sponsor
+            if sponsor.startswith("https://t.me/"):
+                sponsor_id = sponsor.split("/")[-1]
+                if sponsor_id.startswith("+"):
+                    sponsor_id = sponsor  # інвайт-лінки залишаємо як є
+
+            member = bot.get_chat_member(sponsor_id, user_id)
+            if member.status not in ["member", "administrator", "creator"]:
+                not_subscribed.append(sponsor)
+        except:
+            not_subscribed.append(sponsor)
+
+    if not_subscribed:
+        bot.answer_callback_query(call.id, "❌ Ти не підписався на всіх спонсорів!", show_alert=True)
+    else:
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "✅ Вітаю! Ти підписався на всіх спонсорів!")
+
+bot.infinity_polling()
