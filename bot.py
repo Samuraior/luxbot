@@ -1,3 +1,4 @@
+import os
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -5,7 +6,6 @@ TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = -1002703116591
 ADMIN_ID = 5611365099
 sponsors = []  # заміни на свої юзернейми або інвайт-лінки
-
 bot = telebot.TeleBot(TOKEN)
 
 # --- Головне меню ---
