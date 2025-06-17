@@ -57,11 +57,11 @@ def handle(msg):
     user_state[msg.chat.id] = "delete_sponsor"
     sponsors = "\n".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
     bot.send_message(msg.chat.id, f"Введи номер спонсора, якого хочеш видалити:\n{sponsors}")
-    elif text == "✏ Змінити посилання спонсора":
-        user_state[msg.chat.id] = "edit_sponsor"
-        sponsors = "\n".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
-        bot.send_message(msg.chat.id, f"Введи номер і нове посилання (через пробіл):
-{sponsors}")
+    elif text == "🗑 Видалити спонсора":
+    user_state[msg.chat.id] = "delete_sponsor"
+    sponsors = "\n".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
+    bot.send_message(msg.chat.id, f"Введи номер спонсора, якого хочеш видалити:\n{sponsors}")
+
     elif text == "📝 Змінити текст":
         user_state[msg.chat.id] = "edit_text"
         bot.send_message(msg.chat.id, "Введи новий текст для посту (можна з емодзі, посиланнями):")
