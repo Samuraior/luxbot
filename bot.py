@@ -59,8 +59,7 @@ def handle(msg):
     bot.send_message(msg.chat.id, f"Введи номер спонсора, якого хочеш видалити:\n{sponsors}")
     elif text == "✏ Змінити посилання спонсора":
         user_state[msg.chat.id] = "edit_sponsor"
-        sponsors = "
-".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
+        sponsors = "\n".join([f"{i+1}. {link}" for i, link in enumerate(data["sponsors"])])
         bot.send_message(msg.chat.id, f"Введи номер і нове посилання (через пробіл):
 {sponsors}")
     elif text == "📝 Змінити текст":
